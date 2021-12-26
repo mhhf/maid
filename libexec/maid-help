@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+
+echo "MAID - helps organize my ~/src folder
+
+Usage:
+
+		maid fix - go trough every directory and make sure it is in git and upstream
+
+"

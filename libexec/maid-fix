@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+
+set -e
+
+BLACK=$(tput setaf 0)
+RED=$(tput setaf 1)
+GREEN=$(tput setaf 2)
+YELLOW=$(tput setaf 3)
+LIME_YELLOW=$(tput setaf 190)
+POWDER_BLUE=$(tput setaf 153)
+BLUE=$(tput setaf 4)
+MAGENTA=$(tput setaf 5)
+CYAN=$(tput setaf 6)
+WHITE=$(tput setaf 7)
+BRIGHT=$(tput bold)
+NORMAL=$(tput sgr0)
+BLINK=$(tput blink)
+REVERSE=$(tput smso)
+UNDERLINE=$(tput smul)
+
+dhall_default="{ propagate=False, ignore=False }"
+src_path=$HOME/src
+src_length=$(echo $src_path/|wc -c)
+
+printf %$(tput cols)s |tr " " "="
+echo ""
+
+function maid_scan() {
+  for d in $1/*; do
+    clear;
+
+    local propagate=false;
+    local ignore=false;
+    if [ -f "$d/.maid.dhall" ]; then
+      # declare -r -A sett=([propagate]=true)
+      propagate=$(dhall-to-bash <<< "($d/.maid.dhall).propagate")
+      ignore=$(dhall-to-bash <<< "($d/.maid.dhall).ignore")
+    fi
+
+    if [ "$ignore" == "true" ]; then
+      printf ""
+    elif [ -d "$d/.git" ]; then
+      # echo "git: $d"
+      cd $d
+      # git remote --verbose
+      git_changes=$(git status --porcelain=v2 --branch)
+      git_changes_lines="$(git status --porcelain=v2 --branch |wc -l)"
+      if [[ 4 < "$git_changes_lines" ]]; then
+        printf "\n%0s\n"  "${RED}UNCOMMITTED CHANGES${NORMAL} $d"
+        echo ""
+        # echo "$git_changes"
+        git status
+        read -p "i - ignore;  c - commit;  [i]: " -n1 git_uncommitted
+        if [ "$git_uncommitted" == "c" ]; then
+          git diff HEAD
+          printf "\n"
+          read -p "commit message: " git_commit_msg
+          git add .
+          git commit -m "$git_commit_msg"
+          git push
+        else
+          echo ""
+        fi
+      fi
+
+      git_upstream="$(git status --porcelain=v2 --branch|grep branch.ab| grep -E -o '[0-9]+'|head -n1)"
+      if [[ 0 < "$git_upstream" ]]; then
+        printf "\n%0s\n"  "${RED}NOT UPSTREAM${NORMAL} $d"
+        git push
+      fi
+
+      # [ ! -z "$(git status --porcelain)" ] && echo $d
+    elif [ "$propagate" == "true" ]; then
+      maid_scan $d
+    elif [ -d $d ]; then
+      printf "\n%0s\n"  "${RED}NOT A GIT REPO${NORMAL} $d"
+      printf $d |xclip -selection c
+      cd $d
+      tree -L 2 -I node_modules --noreport
+      echo ""
+      printf "p - propagate;  i - ignore;  g - init git;  d - delete;  "
+      read -p "[-]: " -n1 maid_serve
+      echo ""
+
+      if [ "$maid_serve" == "p" ]; then
+        echo "propagating to subfolders..."
+        echo "$dhall_default // { propagate = True }" >> $d/.maid.dhall
+        maid_scan $d
+      elif [ "$maid_serve" == "d" ]; then
+        rm -fdR $d
+      elif [ "$maid_serve" == "i" ]; then
+        echo "ignoring folder"
+        echo "$dhall_default // { ignore = True }" >> $d/.maid.dhall
+      elif [ "$maid_serve" == "g" ]; then
+        project_name=$(echo $d |cut -c ${src_length}- |sed 's/\//-/g')
+        read -p "project name[$project_name]: " project_name_new
+        read -p "description: " project_description
+        git init
+        cp $HOME/.gitignore .
+        git add .
+        git commit -m "init"
+        gh repo create ${project_name_new:-$project_name} --private -y -d "$project_description"
+        git push origin master --set-upstream
+        printf "creating gh repository: $project_name\n$project_description"
+      fi
+    else
+      echo "don't know what to do with $d"
+    fi
+
+  done
+}
+maid_scan $src_path
