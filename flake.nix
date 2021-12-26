@@ -24,6 +24,7 @@
           dhall-bash
           git
           tree
+          github-cli
         ]; 
       in
       {

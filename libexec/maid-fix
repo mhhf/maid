@@ -25,6 +25,8 @@ src_length=$(echo $src_path/|wc -c)
 printf %$(tput cols)s |tr " " "="
 echo ""
 
+# TODO - check last modefied date, if to old, tell me
+
 function maid_scan() {
   for d in $1/*; do
     clear;
